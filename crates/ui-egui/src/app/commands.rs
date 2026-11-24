@@ -28,10 +28,23 @@ impl DesignApp {
         {
             p.entry("spread").or_insert(json!(spread));
         }
-        let r = self.session.execute(id, &params).map_err(|e| e.to_string());
+        let exec = self.session.execute(id, &params);
         self.after_engine();
+        let r = match exec {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                let raw = e.to_string();
+                match &e {
+                    designcraft_engine::EngineError::Disabled(_, reason) => {
+                        self.status(disabled_status(id, reason));
+                    }
+                    _ => self.status(raw.clone()),
+                }
+                Err(raw)
+            }
+        };
         match &r {
-            Err(e) => self.status(e.clone()),
+            Err(_) => {}
             // Copied text goes to the system clipboard too, whichever way Copy was chosen.
             Ok(v) if system_clipboard && matches!(id, "edit.copy" | "edit.cut") => {
                 let text = match v.get("text").and_then(Value::as_str) {
@@ -106,5 +119,18 @@ impl DesignApp {
     pub fn select_tool(&mut self, id: &str) {
         let _ = self.run("tool.select", json!({"tool": id}));
         self.ui.flyout = None;
+    }
+}
+
+/// Plain-language status bar line for an engine command that cannot run in the current state.
+/// The returned `Result::Err` keeps the engine's raw string for MCP, control and tests.
+fn disabled_status(id: &str, reason: &str) -> String {
+    if id == "object.gradient" && reason == "nothing selected" {
+        return "Select a shape first, then apply the gradient.".into();
+    }
+    let mut chars = reason.chars();
+    match chars.next() {
+        Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+        None => String::new(),
     }
 }

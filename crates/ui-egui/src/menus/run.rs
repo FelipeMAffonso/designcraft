@@ -679,7 +679,7 @@ fn run_ui_part3(app: &mut DesignApp, id: &str, p: &Value) -> Option<Result<Value
         "color.swapFillStroke" => crate::toolbar::swap_fill_stroke(app),
         "color.toggleFillStroke" => crate::toolbar::toggle_fill_stroke(app),
         "color.applyColor" => crate::toolbar::apply_color(app),
-        "color.applyGradient" => crate::toolbar::apply_gradient(app),
+        "color.applyGradient" => crate::toolbar::apply_gradient(app, p),
         "color.applyNone" => crate::toolbar::apply_none(app),
         "view.frameEdges" => flag(&mut app.ui.frame_edges),
         "view.overprintPreview" => {

@@ -136,6 +136,9 @@ fn run_keys(app: &mut DesignApp, ctx: &egui::Context, keys: Keys, typing: bool) 
         {
             log::debug!("tool shortcut -> {tool}");
             app.select_tool(&tool);
+        } else if is_silent_bare_color_key(app, &hit.command.id) {
+            // Bare '.', ',' and '/' with nothing selected do nothing and leave the status bar alone,
+            // so typing '.80' after clicking out of a text box never triggers a status message.
         } else {
             // Like choosing the menu item: "…" commands open their dialog.
             // Zoom In/Out by key zoom around the pointer while it is over the canvas.
@@ -149,6 +152,16 @@ fn run_keys(app: &mut DesignApp, ctx: &egui::Context, keys: Keys, typing: bool) 
     if keys.escape && !typing && app.session.tool_id() != "selection" && !app.session.tool_busy() && app.ui.flyout.is_none() {
         app.select_tool("selection");
     }
+}
+
+/// Bare '.', ',' and '/' do nothing when nothing is selected (no object, text or table cell).
+fn is_silent_bare_color_key(app: &DesignApp, id: &str) -> bool {
+    if !matches!(id, "color.applyGradient" | "color.applyColor" | "color.applyNone") {
+        return false;
+    }
+    app.session
+        .active()
+        .is_none_or(|d| d.selection.items.is_empty() && d.selection.text.is_none() && d.selection.cells.is_none())
 }
 
 /// Takes the Presentation keys out of `input`. Presentation hides every control, so Esc always

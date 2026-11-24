@@ -623,3 +623,72 @@ fn alt_click_cycles_the_tool_flyout_group() {
     assert!(h.state().app.ui.dialog.is_none(), "plain click after Alt-click must not open Polygon Settings");
     assert_eq!(h.state().app.session.tool_id(), "polygonFrame");
 }
+
+/// Bare '.', ',' and '/' with nothing selected do nothing and leave the status bar silent
+/// (typing '.80' after clicking out of a text box shows no message and changes no defaults).
+#[test]
+fn bare_color_apply_keys_with_nothing_selected_are_silent_noops() {
+    use egui::{Event, Key, Modifiers};
+    use serde_json::json;
+    fn press(app: &mut crate::DesignApp, ctx: &egui::Context, key: Key) {
+        let events = [true, false]
+            .map(|pressed| Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: Modifiers::NONE })
+            .to_vec();
+        ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| crate::menus::shortcuts(app, ui.ctx())).textures_delta.clear();
+    }
+    let mut app = app(false);
+    let ctx = egui::Context::default();
+    app.run("file.new", json!({})).unwrap();
+    app.ui.status.clear();
+    let defaults_before = {
+        let d = &app.session.active().unwrap().doc.settings.new_object;
+        (d.fill.clone(), d.stroke.clone())
+    };
+    for key in [Key::Period, Key::Num8, Key::Num0, Key::Comma, Key::Slash] {
+        press(&mut app, &ctx, key);
+        assert!(app.ui.status.is_empty(), "bare key {key:?} with nothing selected must stay silent, got {:?}", app.ui.status);
+        assert!(!app.ui.status.contains("is not available right now"));
+    }
+    let defaults_after = {
+        let d = &app.session.active().unwrap().doc.settings.new_object;
+        (d.fill.clone(), d.stroke.clone())
+    };
+    assert_eq!(defaults_after, defaults_before, "bare color keys with nothing selected leave defaults untouched");
+}
+
+/// Clicking the Apply Gradient toolbar button with nothing selected shows plain guidance
+/// instead of a raw command error.
+#[test]
+fn apply_gradient_toolbar_button_with_nothing_selected_shows_plain_message() {
+    use egui::{Event, Modifiers, PointerButton};
+    let mut app = app(true);
+    app.run("file.new", serde_json::json!({})).unwrap();
+    app.ui.status.clear();
+    let mut h = test_window::open(app, vec2(1400.0, 900.0));
+    let at = rect(&h, "Apply Gradient (.)").center();
+    h.input_mut().events.push(Event::PointerMoved(at));
+    h.input_mut().events.push(Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE });
+    h.input_mut().events.push(Event::PointerButton { pos: at, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE });
+    h.run_steps(3);
+    assert_eq!(h.state().app.ui.status, "Select a shape first, then apply the gradient.");
+    assert!(!h.state().app.ui.status.contains("command `object.gradient` is not available right now"));
+}
+
+/// Planted control: direct engine `object.gradient` with nothing selected still returns the raw
+/// `EngineError::Disabled` string for MCP/control/tests, while the status bar never shows it.
+#[test]
+fn engine_disabled_keeps_raw_err_for_callers_but_status_bar_refuses_raw_message() {
+    use serde_json::json;
+    let mut app = app(false);
+    app.run("file.new", json!({})).unwrap();
+    app.ui.status.clear();
+    let err = app
+        .run(
+            "object.gradient",
+            json!({"stops": [{"location": 0, "color": "#ffffff"}, {"location": 100, "color": "#000000"}], "target": "fill"}),
+        )
+        .unwrap_err();
+    assert_eq!(err, "command `object.gradient` is not available right now: nothing selected", "planted raw engine error preserved for callers");
+    assert_eq!(app.ui.status, "Select a shape first, then apply the gradient.");
+    assert!(!app.ui.status.contains("is not available right now"), "status bar must refuse raw engine error");
+}

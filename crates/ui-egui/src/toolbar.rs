@@ -463,7 +463,7 @@ fn fill_stroke_proxy(app: &mut DesignApp, ui: &mut egui::Ui, width: f32, cols: u
                 })
                 .clicked()
             {
-                let _ = app.run(id, json!({}));
+                let _ = app.run(id, json!({"fromToolbar": true}));
             }
         }
     } else {
@@ -478,12 +478,12 @@ fn fill_stroke_proxy(app: &mut DesignApp, ui: &mut egui::Ui, width: f32, cols: u
         paint_kind(ui.painter(), well, front_kind);
         flyout_triangle(ui.painter(), well, t.icon);
         if resp.clicked() {
-            let _ = app.run(id, json!({}));
+            let _ = app.run(id, json!({"fromToolbar": true}));
         }
         egui::Popup::context_menu(&resp).show(|ui| {
             for (tip, id) in applies {
                 if ui.button(crate::rtl::widget(ui, crate::i18n::tr(&app.ui.language, tip))).clicked() {
-                    let _ = app.run(id, json!({}));
+                    let _ = app.run(id, json!({"fromToolbar": true}));
                     ui.close();
                 }
             }
@@ -664,8 +664,13 @@ pub(crate) fn apply_color(app: &mut DesignApp) -> Result<Value, String> {
 
 /// Apply Gradient (.): the gradient applied last, else the document's first gradient swatch, else
 /// a new white-to-black gradient (InDesign's default), on the fill or stroke in front.
-pub(crate) fn apply_gradient(app: &mut DesignApp) -> Result<Value, String> {
+pub(crate) fn apply_gradient(app: &mut DesignApp, p: &Value) -> Result<Value, String> {
     let st = app.session.active().ok_or("no document")?;
+    let nothing_selected = st.selection.items.is_empty() && st.selection.text.is_none() && st.selection.cells.is_none();
+    if nothing_selected && p.get("fromToolbar").and_then(Value::as_bool) == Some(true) {
+        app.status("Select a shape first, then apply the gradient.");
+        return Ok(json!({}));
+    }
     let known = app
         .ui
         .last_gradient
